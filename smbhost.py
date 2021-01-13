@@ -1,4 +1,5 @@
-from samba import utils
+from os     import getenv
+from samba  import utils
 
 '''
 Methods,
@@ -7,7 +8,7 @@ def __init__(self, configLines = None, data = None)
 def get_HostData(self)
 def get(self, key)
 def set_value(self, key, val)
-def changeConfig(self, name = None, path = None, writeable = None, create_mask = None, directory_mask = None, public = None)
+def changeConfig(self, name = None, path = None, writable = None, create_mask = None, directory_mask = None, public = None)
 def userExists(self, userName)
 def addValidUser(self, userName)
 def removeValidUser(self, userName)
@@ -17,7 +18,7 @@ def getRAW(self)
 
 [pimylifeupshare]
 path = /home/pi/shared
-writeable=Yes
+writable=Yes
 create mask=0777
 directory mask=0777
 public=no
@@ -31,11 +32,12 @@ class Host:
             self.config = {
                 "name" : "",
                 "path" : "",
-                "writeable" : "",
+                "writable" : "",
                 "create mask" : "",
                 "directory mask" : "",
                 "public" : "No",
                 "valid users" : [],
+                "force user" : ""
             }
             for line in configLines:
                 if '[' in line:
@@ -45,8 +47,8 @@ class Host:
                 if 'path' in line:
                     self.config.__setitem__('path', line[line.find('=') + 1 : ].strip())
 
-                if 'writeable' in line:
-                    self.config.__setitem__('writeable', line[line.find('=') + 1 : ].strip())
+                if 'writable' in line:
+                    self.config.__setitem__('writable', line[line.find('=') + 1 : ].strip())
 
                 if 'create mask' in line:
                     self.config.__setitem__('create mask', line[line.find('=') + 1 : ].strip())
@@ -61,17 +63,17 @@ class Host:
                 
                 if 'valid users' in line:
                     tmp = line[line.find('=') + 1 : ].strip()
-                    arr = tmp.split(',')
+                    arr = tmp.split(' ')
                     arr2 = []
                     for item in arr:
-                        if item.strip() != '': arr2.append(item.strip())
+                        if item.strip() != '' and item.strip() != getenv('ADMIN_USER'): arr2.append(item.strip())
                     
                     self.config.__setitem__('valid users', arr2)
 
         elif data != None:
             self.config = data
 
-        print('SMB initialized')
+        self.currentPath = self.config.get('path')
 
     
 
@@ -85,15 +87,13 @@ class Host:
         self.config.__setitem__(key, val)
 
     
-    def changeConfig(self, name = None, path = None, writeable = None, create_mask = None, directory_mask = None, public = None):
+    def changeConfig(self, name = None, path = None, writable = None, create_mask = None, directory_mask = None, public = None):
         if name != None : self.set_value('name', name)
         if path != None : self.set_value('path', path)
-        if writeable != None : self.set_value('writeable', writeable)
+        if writable != None : self.set_value('writable', writable)
         if create_mask != None : self.set_value('create mask', create_mask)
         if directory_mask != None : self.set_value('directory mask', directory_mask)
         if public != None : self.set_value('public', public)
-
-
 
         
         
@@ -110,7 +110,7 @@ class Host:
         if utils.isUserName(userName) == True:
             userName = userName.strip()
             if self.userExists(userName):
-                print('User already exists in this host')
+                print(f'User already exists in this host \t\t[{self.get("name")}]')
             else:
                 x = self.config.get('valid users')
                 x.append(userName) 
@@ -124,7 +124,7 @@ class Host:
     def removeValidUser(self, userName):
         if utils.isUserName(userName) == True:
             if userName not in self.config.get('valid users'):
-                print('User not exists in this host')
+                print(f'User not exists in this host \t\t[{self.get("name")}]')
             else:
                 x = self.config.get('valid users')
                 userName = userName.strip()
@@ -154,20 +154,21 @@ class Host:
         flag = False
         for item in x:
             if flag == True:
-                users += ', '
+                users += ' '
             users += f'{item}'
             flag = True
 
         return f'''
 
 #START#
-[{self.config.get('name')}]
-path = {self.config.get('path')}
-writeable = {self.config.get('writeable')}
-create mask = {self.config.get('create mask')}
-directory mask = {self.config.get('directory mask')}
-public = {self.config.get('public')}
-valid users = {users}
+[{self.get('name')}]
+path = {self.get('path')}
+writable = {self.get('writable')}
+create mask = {self.get('create mask')}
+directory mask = {self.get('directory mask')}
+public = {self.get('public')}
+{"#" if self.get('public') == "Yes" or self.get('public') == "yes" else ""}valid users = {users} {getenv('ADMIN_USER')}
+force user = {self.get('force user')}
 #END#
 
 '''

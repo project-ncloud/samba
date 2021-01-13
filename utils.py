@@ -1,4 +1,8 @@
-RESERVED:list = ['root', 'pi', 'epicX', 'dni9', 'sujoy', 'suvrojit'] #exclude these names while processing usernames
+import subprocess
+import os
+from serviceHandler import getCurrentUser
+
+RESERVED:list = ['root', os.getenv('ADMIN_USER'), getCurrentUser()] #exclude these names while processing usernames
 
 def getLines(RAW):
     return RAW.split('\n')
@@ -60,12 +64,28 @@ def isUserName(name):
 
 
 
+def getCurrentUser():
+    p =  subprocess.Popen("whoami", stdout=subprocess.PIPE)
+    (output, err) = p.communicate()
+    return output.decode()
         
-        
 
 
         
+#To check if all the required data available or not
+def isRequiredDataAvailable(data, keys):
+    if data == None:
+        return None
+
+    length = len(keys)
+    operationCounter = 0
+
+    for item in data:
+        for key in keys:
+            if item.__str__() == key:
+                if item != None:
+                    operationCounter += 1
+                
+                break
         
-
-
-
+    return True if operationCounter == length else False
