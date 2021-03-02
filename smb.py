@@ -3,6 +3,7 @@ import samba.utils as utils
 from samba.smbhost import Host
 from serviceHandler import *
 import os
+import platform
 
 '''
 Methods,
@@ -44,7 +45,7 @@ class SMB:
 
 
     def normalizeConfig(self):
-        lines = utils.getLines(self.configFile.read_text())
+        lines = utils.getLines(self.configFile.read_text(encoding="utf8"))
         normalized:bool = False
         for line in lines:
             if "###SMBNAS###" in line:
@@ -59,7 +60,7 @@ class SMB:
             for line in lines:
                 STR += line + "\n"
 
-            self.configFile.write_text(STR)
+            self.configFile.write_text(STR, encoding="utf8")
 
 
     def loadConfigs(self):
@@ -85,6 +86,31 @@ class SMB:
         for item in self.Hosts:
             print(f'{item.config.get("name")}\t[{item.config.get("path")}]')
 
+
+    
+    def isValidPath(self, req, onlyDir = True):
+        is_technically_valid = Path(req.get('path')).exists() and (onlyDir or Path(req.get('path')).is_file())
+
+        if not is_technically_valid : 
+            return False
+
+
+        hostName = req.get('host_name')
+        is_host_exists = False
+        hostPath = None
+        for host in self.Hosts:
+            if hostName == host.get("name"):
+                is_host_exists = True
+                hostPath = host.get("path")
+                break
+
+        if is_host_exists and req.get('path').find(hostPath) == 0:
+            return True
+        
+        return False
+
+        
+
     
     def pushIntoConf(self):
         RAW = self.configFile.read_text()
@@ -102,7 +128,10 @@ class SMB:
 
         #self.configFile.write_text(preRAW + HOST_RAW + postRAW)
         print(f'Pushing config into {self.configFile.__str__()}')
-        print(os.system(f'sudo cat > {self.configFile.__str__().strip()} << EOF\n{preRAW + HOST_RAW + postRAW}EOF'))
+        if platform.system() != "Windows":
+            print(os.system(f'sudo cat > {self.configFile.__str__().strip()} << EOF\n{preRAW + HOST_RAW + postRAW}EOF'))
+        else:
+            self.configFile.write_text(preRAW + HOST_RAW + postRAW, encoding="utf-8")
 
         for item in self.CRITICAL_CMD:
             os.system(item)
@@ -121,8 +150,10 @@ class SMB:
         if isHostExists == True:
             print(f'{hostName} Already Exists')
         else:
-            self.CRITICAL_CMD.append(f'mkdir -p {host.get("path")}')
-            self.CRITICAL_CMD.append(f'chown {getCurrentUser()} {host.config.get("path")}')
+            if platform.system() != 'Windows':
+                self.CRITICAL_CMD.append(f'mkdir -p \'{host.get("path")}\'')
+                self.CRITICAL_CMD.append(f'chown {getCurrentUser()} \'{host.config.get("path")}\'')
+            
             self.Hosts.append(host)
             return True
 
@@ -134,9 +165,11 @@ class SMB:
         for item in self.Hosts:
             if hostName == item.config.get('name'):
                 print(f'{hostName} removed')
-                if removeData == True:
-                    self.CRITICAL_CMD.append(f'rm -rf {item.config.get("path")}')
-                self.Hosts.remove(item)
+                if removeData == True and platform.system() != 'Windows':
+                    self.CRITICAL_CMD.append(f'rm -rf \'{item.config.get("path")}\'')
+                
+                if platform.system() != 'Windows':
+                    self.Hosts.remove(item)
                 return True
 
         print(f'{hostName} not found')
@@ -150,11 +183,12 @@ class SMB:
                 host.changeConfig(name = name, path = path, writable = writable, create_mask = create_mask, directory_mask = directory_mask, public = public)
                 
                 if host.get('path') != host.currentPath:
-                    if wipeData == True:
+                    if wipeData == True and platform.system() != 'Windows':
                         self.CRITICAL_CMD.append(f'sudo rm -rf {host.currentPath}')
 
-                    self.CRITICAL_CMD.append(f'sudo mkdir -p {host.get("path")}')
-                    self.CRITICAL_CMD.append(f'chown {getCurrentUser()} {host.config.get("path")}')
+                    if platform.system() != 'Windows':
+                        self.CRITICAL_CMD.append(f'sudo mkdir -p \'{host.get("path")}\'')
+                        self.CRITICAL_CMD.append(f'chown {getCurrentUser()} \'{host.config.get("path")}\'')
                 hostFound = True
                 break
 
@@ -183,13 +217,12 @@ class SMB:
             
 
     #SYSTEM Specific functions
-
     @staticmethod
-    def addUser(userName):
+    def addUser(userName = 'admin'):
         if utils.isUserName(userName) == False:
             return False
 
-        exitCode = os.system(f'sudo useradd {userName}')
+        exitCode = os.system(f'sudo useradd {userName}') if platform.system() != 'Windows' else 0
 
         if exitCode == 0:
             print(f'Operation Successful  [{userName}] Added / Modified')
@@ -201,7 +234,7 @@ class SMB:
         if utils.isUserName(userName) == False:
             return False
 
-        exitCode = os.system(f'sudo userdel {userName}')
+        exitCode = os.system(f'sudo userdel {userName}') if platform.system() != 'Windows' else 0
 
         if exitCode == 0:
             print(f'Operation Successful  [{userName}] Added / Modified')
@@ -212,8 +245,8 @@ class SMB:
 
 
     @staticmethod
-    def add_SMBUser(userName, password):
-        exitCode = os.system(f'echo "{password}\n{password}" | sudo smbpasswd -s -a {userName}')
+    def add_SMBUser(userName = 'admin', password = 69):
+        exitCode = os.system(f'echo "{password}\n{password}" | sudo smbpasswd -s -a {userName}') if platform.system() != 'Windows' else 0
 
         if exitCode == 0:
             print(f'Operation Successful  [{userName}] Added / Modified')
@@ -225,7 +258,7 @@ class SMB:
 
     @staticmethod
     def remove_SMBUser(userName):
-        exitCode = os.system(f'sudo smbpasswd -s -a {userName}')
+        exitCode = os.system(f'sudo smbpasswd -s -a {userName}') if platform.system() != 'Windows' else 0
 
         if exitCode == 0:
             print(f'{userName} Removed')
@@ -236,7 +269,7 @@ class SMB:
 
     @staticmethod
     def enable_SMBUser(userName):
-        exitCode = os.system(f'sudo smbpasswd -s -e {userName}')
+        exitCode = os.system(f'sudo smbpasswd -s -e {userName}') if platform.system() != 'Windows' else 0
 
         if exitCode == 0:
             return True
@@ -246,7 +279,7 @@ class SMB:
 
     @staticmethod
     def disable_SMBUser(userName):
-        exitCode = os.system(f'sudo smbpasswd -s -d {userName}')
+        exitCode = os.system(f'sudo smbpasswd -s -d {userName}') if platform.system() != 'Windows' else 0
 
         if exitCode == 0:
             return True
@@ -257,7 +290,7 @@ class SMB:
 
     @staticmethod
     def startSMBD():
-        exitCode = os.system('sudo systemctl start smbd')
+        exitCode = os.system('sudo systemctl start smbd') if platform.system() != 'Windows' else 0
         if exitCode == 0:
             print('smbd started\t[SAMBA]')
             return True
@@ -269,7 +302,7 @@ class SMB:
     
     @staticmethod
     def restartSMBD():
-        exitCode = os.system('sudo systemctl restart smbd')
+        exitCode = os.system('sudo systemctl restart smbd') if platform.system() != 'Windows' else 0
         if exitCode == 0:
             print('smbd restarted\t[SAMBA]')
             return True
@@ -280,7 +313,7 @@ class SMB:
     
     @staticmethod
     def stopSMBD():
-        exitCode = os.system('sudo systemctl stop smbd')
+        exitCode = os.system('sudo systemctl stop smbd') if platform.system() != 'Windows' else 0
         if exitCode == 0:
             print('smbd stopped\t[SAMBA]')
             return True
@@ -292,13 +325,21 @@ class SMB:
 
     @staticmethod
     def reloadSMBD():
-        exitCode = os.system('sudo smbcontrol all reload-config')
+        exitCode = os.system('sudo smbcontrol all reload-config') if platform.system() != 'Windows' else 0
         if exitCode == 0:
             print('smbd configuration reloaded\t[SAMBA]')
             return True
         else:
             print(f'Error occurred while reloading SAMBA\t[{exitCode}]')
             return False
+
+
+    #Utity functions
+    def getHost(self, hostname:str):
+        for host in self.Hosts:
+            if hostname == host.get("name"):
+                return host
+        return None
             
 
 

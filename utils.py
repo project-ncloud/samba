@@ -1,8 +1,14 @@
 import subprocess
 import os
+import platform
 from serviceHandler import getCurrentUser
+from dotenv import load_dotenv
 
-RESERVED:list = ['root', os.getenv('ADMIN_USER'), getCurrentUser()] #exclude these names while processing usernames
+load_dotenv('.env')
+
+
+RESERVED:list = ['root', getCurrentUser()] #exclude these names while processing usernames
+
 
 def getLines(RAW):
     return RAW.split('\n')
@@ -53,9 +59,10 @@ def parseHost(hosts):
 
 
 
-def isUserName(name):
+def isUserName(name:str):
+    if name == None:
+        return False
     name = name.strip()
-
     for keyword in RESERVED:
         if keyword.lower() == name.lower():
             return False
@@ -65,9 +72,12 @@ def isUserName(name):
 
 
 def getCurrentUser():
-    p =  subprocess.Popen("whoami", stdout=subprocess.PIPE)
-    (output, err) = p.communicate()
-    return output.decode()
+    if platform.system() != "Windows":
+        p =  subprocess.Popen("whoami", stdout=subprocess.PIPE)
+        (output, err) = p.communicate()
+        return output.decode()
+    else:
+        return "Window_Mock"
         
 
 
